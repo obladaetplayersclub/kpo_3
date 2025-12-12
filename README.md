@@ -94,7 +94,7 @@
 1. Нужно клонировать репозиторий в нужную папку
 ```bash
 cd <папка>
-git clone
+git clone https://github.com/obladaetplayersclub/kpo_3.git
 ```
 
 2. Далее запускаем сервисы:
