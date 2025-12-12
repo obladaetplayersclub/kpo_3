@@ -1,0 +1,115 @@
+{
+  "info": {
+    "name": "Anti-Plagiarism System API",
+    "description": "Коллекция запросов для системы антиплагиата",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "studentName",
+                  "value": "Иван Иванов",
+                  "type": "text"
+                },
+                {
+                  "key": "assignmentName",
+                  "value": "Домашнее задание 1",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/files",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "files"]
+            },
+            "description": "Загружает файл работы студента"
+          }
+        },
+        {
+          "name": "Get File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/files/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "files", "1"]
+            },
+            "description": "Получает файл по ID работы"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/reports/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "reports", "1"]
+            },
+            "description": "Получает все отчеты анализа для работы"
+          }
+        },
+        {
+          "name": "Analyze File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/reports/analyze/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "reports", "analyze", "1"]
+            },
+            "description": "Запускает анализ файла на плагиат"
+          }
+        },
+        {
+          "name": "Get Word Cloud",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/reports/1/wordcloud",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["api", "reports", "1", "wordcloud"]
+            },
+            "description": "Получает изображение облака слов для работы"
+          }
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,60 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: kpo_container_postgres
+    environment:
+      POSTGRES_DB: kpo_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+      
+
+  file-storing:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: filestoring
+      SERVER_PORT: 8081
+      MAIN_CLASS: filestoring.FileStoringApplication
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kpo_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+
+  file-analysis:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: fileanalysis
+      SERVER_PORT: 8082
+      MAIN_CLASS: fileanalysis.FileAnalysisApplication
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kpo_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      FILE_STORING_SERVICE_URL: http://file-storing:8081
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+      - file-storing
+
+  gateway:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: gateway
+      SERVER_PORT: 8080
+      MAIN_CLASS: gateaway.GatewayApplication
+      FILE_STORING_SERVICE_URL: http://file-storing:8081
+      FILE_ANALYSIS_SERVICE_URL: http://file-analysis:8082
+    ports:
+      - "8080:8080"
+    depends_on:
+      - file-storing
+      - file-analysis
+
+
+volumes:
+ postgres-data:
