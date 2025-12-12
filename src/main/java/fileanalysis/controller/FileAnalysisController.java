@@ -57,7 +57,16 @@ public class FileAnalysisController {
             return ResponseEntity.ok()
                 .headers(headers)
                 .body(imageBytes);
+        } catch (java.io.IOException e) {
+            
+            System.err.println("Ошибка при генерации облака слов для workId=" + workId + ": " + e.getMessage());
+           
+            if (e.getMessage() != null && (e.getMessage().contains("не найден") || e.getMessage().contains("Недостаточно слов"))) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.status(500).build();
         } catch (Exception e) {
+            System.err.println("Неожиданная ошибка при генерации облака слов для workId=" + workId + ": " + e.getMessage());
             return ResponseEntity.status(500).build();
         }
     }
