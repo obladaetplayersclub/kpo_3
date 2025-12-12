@@ -2,6 +2,7 @@ package fileanalysis.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HashMap;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import fileanalysis.entity.Analysis;
 import fileanalysis.repository.AnalysisRepository;
 
@@ -23,13 +26,15 @@ public class FileAnalysisService {
     
     private final AnalysisRepository analysisRepository;
     private final WebClient webClient;
+    private final ObjectMapper objectMapper;
     
     @Value("${file.storing.service.url}")
     private String fileStoringServiceUrl;
     
-    public FileAnalysisService(AnalysisRepository analysisRepository, WebClient webClient) {
+    public FileAnalysisService(AnalysisRepository analysisRepository, WebClient webClient, ObjectMapper objectMapper) {
         this.analysisRepository = analysisRepository;
         this.webClient = webClient;
+        this.objectMapper = objectMapper;
     }
 
     public byte[] readFileAsBytes(Long workId) throws IOException {
@@ -94,34 +99,21 @@ public class FileAnalysisService {
         return analysisRepository.findByWork_Id(workId);
     }
 
-    /**
-     * Читает файл как текст
-     * @param workId ID работы
-     * @return текст файла
-     */
     public String readFileAsText(Long workId) throws IOException {
         byte[] fileBytes = readFileAsBytes(workId);
         return new String(fileBytes, StandardCharsets.UTF_8);
     }
 
-    /**
-     * Извлекает слова из текста и подсчитывает их частоту
-     * @param text текст файла
-     * @return Map с словами и их частотами
-     */
     private Map<String, Integer> extractWordFrequencies(String text) {
         Map<String, Integer> wordFreq = new HashMap<>();
         
         if (text == null || text.trim().isEmpty()) {
             return wordFreq;
         }
-        
-        // Разбиваем текст на слова, убираем пунктуацию и приводим к нижнему регистру
-        // Используем правильный диапазон Unicode для кириллицы и латиницы
-        // \p{L} - все буквы Unicode, но мы ограничиваем только кириллицей и латиницей
+
         String cleanedText = text.toLowerCase()
-            .replaceAll("[^а-яёa-z\\s]", " ") // Оставляем только кириллицу (а-я, ё), латиницу (a-z) и пробелы
-            .replaceAll("\\s+", " ") // Заменяем множественные пробелы на один
+            .replaceAll("[^\\p{IsCyrillic}\\p{IsLatin}\\s]", " ")
+            .replaceAll("\\s+", " ")
             .trim();
         
         if (cleanedText.isEmpty()) {
@@ -130,13 +122,11 @@ public class FileAnalysisService {
         
         String[] words = cleanedText.split("\\s+");
         
-        // Исключаем короткие слова и стоп-слова
         String[] stopWords = {"и", "в", "на", "с", "по", "для", "от", "до", "из", "к", "о", "а", "как", "что", 
                               "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with"};
         
         for (String word : words) {
             word = word.trim();
-            // Пропускаем короткие слова (меньше 3 символов) и стоп-слова
             if (word.length() >= 3 && !isStopWord(word, stopWords)) {
                 wordFreq.put(word, wordFreq.getOrDefault(word, 0) + 1);
             }
@@ -154,67 +144,61 @@ public class FileAnalysisService {
         return false;
     }
 
-    /**
-     * Генерирует URL для QuickChart API с облаком слов
-     * @param workId ID работы
-     * @return URL изображения облака слов
-     * @throws IOException если файл не найден или нет слов для генерации
-     */
-    public String generateWordCloudUrl(Long workId) throws IOException {
+    private String generateWordCloudText(Long workId) throws IOException {
         String text = readFileAsText(workId);
         Map<String, Integer> wordFreq = extractWordFrequencies(text);
         
-        // Проверяем, что есть слова для генерации облака
         if (wordFreq.isEmpty()) {
-            throw new IOException("Недостаточно слов для генерации облака слов. Текст слишком короткий или содержит только стоп-слова.");
+            throw new IOException("Недостаточно слов для генерации облака слов.");
         }
         
-        // Сортируем по частоте и берем топ-50 слов
         List<Map.Entry<String, Integer>> sortedWords = wordFreq.entrySet().stream()
             .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
             .limit(50)
             .collect(Collectors.toList());
-        
-        // Формируем строку для QuickChart: "word1:10,word2:5,word3:3"
-        String wordCloudData = sortedWords.stream()
+
+        // Формируем строку для QuickChart wordCloud API: "word1:count1,word2:count2"
+        String wordCloudText = sortedWords.stream()
             .map(entry -> entry.getKey() + ":" + entry.getValue())
             .collect(Collectors.joining(","));
         
-        // Проверяем, что данные не пустые
-        if (wordCloudData.isEmpty()) {
-            throw new IOException("Не удалось сформировать данные для облака слов");
-        }
-        
-        // Логируем для отладки
-        System.out.println("DEBUG: Извлеченные слова для облака: " + wordCloudData);
-        
-        // Формируем URL для QuickChart API
-        // Важно: используем правильное кодирование для кириллицы
-        String encodedData = java.net.URLEncoder.encode(wordCloudData, StandardCharsets.UTF_8);
-        String url = "https://quickchart.io/wordcloud?text=" + encodedData + "&format=png&width=800&height=400";
-        
-        System.out.println("DEBUG: URL для QuickChart (первые 200 символов): " + url.substring(0, Math.min(200, url.length())));
-        
-        return url;
+        return wordCloudText;
     }
 
     public byte[] getWordCloudImage(Long workId) throws IOException {
-        String wordCloudUrl = generateWordCloudUrl(workId);
+        String wordCloudText = generateWordCloudText(workId);
         
         try {
+            // Формируем URL для QuickChart wordCloud API
+            // Формат: https://quickchart.io/wordcloud?text=word1:count1,word2:count2&format=png&width=800&height=400
+            String encodedText = java.net.URLEncoder.encode(wordCloudText, StandardCharsets.UTF_8);
+            String url = String.format(
+                "https://quickchart.io/wordcloud?text=%s&format=png&width=800&height=400&backgroundColor=white",
+                encodedText
+            );
+            
             byte[] imageBytes = webClient.get()
-                .uri(wordCloudUrl)
+                .uri(URI.create(url))
                 .retrieve()
                 .bodyToMono(byte[].class)
                 .block();
             
             if (imageBytes == null || imageBytes.length == 0) {
-                throw new IOException("Не удалось получить изображение облака слов: пустой ответ от QuickChart API");
+                throw new IOException("Не удалось получить изображение облака слов: пустой ответ");
             }
             
-            return imageBytes;
+            // Проверяем, что это действительно PNG (начинается с PNG signature)
+            if (imageBytes.length >= 8 && 
+                imageBytes[0] == (byte)0x89 && imageBytes[1] == 'P' && 
+                imageBytes[2] == 'N' && imageBytes[3] == 'G') {
+                return imageBytes;
+            }
+            
+            throw new IOException("Не удалось получить изображение облака слов: неверный формат ответа");
         } catch (WebClientResponseException e) {
-            throw new IOException("Ошибка при обращении к QuickChart API: " + e.getStatusCode() + " - " + e.getMessage(), e);
+            String errorBody = e.getResponseBodyAsString();
+            throw new IOException("Ошибка QuickChart API: " + e.getStatusCode() + " body: " + 
+                (errorBody != null && errorBody.length() > 200 ? errorBody.substring(0, 200) : errorBody), e);
         } catch (Exception e) {
             throw new IOException("Не удалось получить изображение облака слов: " + e.getMessage(), e);
         }
